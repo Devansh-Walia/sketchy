@@ -67,18 +67,6 @@
             </span>
         </button>
     </Tooltip>
-    <Tooltip text="write something down" delay={300}>
-        <button
-            on:click={() => changeTool(TOOLS.TEXT)}
-            class={toolType === TOOLS.TEXT ? 'active' : 'inactive'}
-            style:background
-        >
-            T
-            <span class="visually-hidden">
-                Select the pen tool to write on the canvas
-            </span>
-        </button>
-    </Tooltip>
     <Tooltip text="reset your mistakes!!" delay={300}>
         <button
             on:click={handleEraserClick}
@@ -132,7 +120,10 @@
                     <input
                         type="color"
                         value={paletteColor}
-                        on:blur={(e) => handleColorClick(e.target.value)}
+                        on:blur={(e) =>
+                            handleColorClick(
+                                (e.target as HTMLInputElement).value,
+                            )}
                     />
 
                     {#each colors as color}

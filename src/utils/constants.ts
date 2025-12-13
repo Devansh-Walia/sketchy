@@ -24,7 +24,6 @@ export const CUSTOM_STROKE_EVENT = 'strokeWidthChange';
 export enum TOOLS {
     PEN = 'pen',
     ERASER = 'eraser',
-    TEXT = 'text',
     HAND = 'hand',
     CROSS_OUT = 'cross-out',
 }
@@ -32,7 +31,6 @@ export enum TOOLS {
 export const toolCursors = {
     [TOOLS.ERASER]: 'cursor-eraser',
     [TOOLS.PEN]: 'cursor-pen',
-    [TOOLS.TEXT]: 'cursor-text',
     [TOOLS.HAND]: 'cursor-hand',
     [TOOLS.CROSS_OUT]: 'cursor-cross-out',
 };

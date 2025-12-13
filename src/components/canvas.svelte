@@ -415,9 +415,6 @@
             url('/pen.svg') 2 10,
             pointer;
     }
-    .cursor-text {
-        cursor: text;
-    }
     .cursor-hand {
         cursor: grab;
     }
