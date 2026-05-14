@@ -13,6 +13,10 @@ export interface CanvasData {
     [key: string]: string;
 }
 
+export interface NoteData {
+    [key: string]: string;
+}
+
 export type Point = {
     x: number;
     y: number;

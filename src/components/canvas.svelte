@@ -11,6 +11,8 @@
     export let paletteColor: string;
     export let background = 'none';
     export let toolType: TOOLS;
+    export let interactive = true;
+    export let size = 100;
 
     export let strokeWidth = 2;
 
@@ -25,8 +27,7 @@
     let dragging = false;
     let scale = 1;
     let dragStart: Point | null = null;
-
-    const CELL_SIZE = 100;
+    let lastLoadedState: string | undefined;
 
     function getMousePosition(event: MouseEvent | TouchEvent): {
         x: number;
@@ -156,9 +157,9 @@
                 type: TOOLS.CROSS_OUT,
                 points: [
                     { x: 0, y: 0 },
-                    { x: CELL_SIZE, y: CELL_SIZE },
-                    { x: 0, y: CELL_SIZE },
-                    { x: CELL_SIZE, y: 0 },
+                    { x: size, y: size },
+                    { x: 0, y: size },
+                    { x: size, y: 0 },
                 ],
                 strokeColor: 'red',
                 strokeWidth: 3,
@@ -232,7 +233,7 @@
         redraw();
     };
 
-    function undo(): void {
+    export function undo(): void {
         if (undoStack.length > 0) {
             const lastElement = undoStack.pop();
             if (lastElement) {
@@ -243,7 +244,7 @@
         }
     }
 
-    function redo(): void {
+    export function redo(): void {
         if (redoStack.length > 0) {
             const redoElement = redoStack.pop();
             if (redoElement) {
@@ -254,7 +255,7 @@
         }
     }
 
-    function clearCanvas(): void {
+    export function clearCanvas(): void {
         elements = [];
         undoStack = [];
         redoStack = [];
@@ -295,9 +296,9 @@
             } else if (element.type === TOOLS.CROSS_OUT) {
                 // Check if the eraser intersects with the cross
                 const crossLeft = element.position.x;
-                const crossRight = element.position.x + CELL_SIZE;
+                const crossRight = element.position.x + size;
                 const crossTop = element.position.y;
-                const crossBottom = element.position.y + CELL_SIZE;
+                const crossBottom = element.position.y + size;
 
                 if (
                     x >= crossLeft - eraserSize / 2 &&
@@ -369,44 +370,74 @@
             }
         });
 
-        handleCanvasChange(id, JSON.stringify({ elements }));
+        if (interactive) {
+            handleCanvasChange(id, JSON.stringify({ elements }));
+        }
         context.restore();
     };
 
+    function loadStateFromProp() {
+        if (!state) {
+            elements = [];
+            lastLoadedState = state;
+            redraw();
+            return;
+        }
+
+        try {
+            const data = JSON.parse(state);
+            elements = Array.isArray(data?.elements) ? data.elements : [];
+        } catch {
+            elements = [];
+        }
+        lastLoadedState = state;
+        redraw();
+    }
+
+    $: if (!interactive && context && state !== lastLoadedState) {
+        loadStateFromProp();
+    }
+
     onMount(() => {
-        canvas.width = CELL_SIZE;
-        canvas.height = CELL_SIZE;
+        canvas.width = size;
+        canvas.height = size;
         context = canvas.getContext('2d') as CanvasRenderingContext2D;
 
-        if (state) {
-            const data = JSON.parse(state);
-
-            elements = data?.elements as Element[];
-            redraw();
-        }
+        loadStateFromProp();
     });
 
     onDestroy(() => {
-        handleCanvasChange(id, JSON.stringify({ elements }));
+        if (interactive) {
+            handleCanvasChange(id, JSON.stringify({ elements }));
+        }
     });
 </script>
 
 <canvas
-    class={toolCursors[toolType]}
+    class={`${toolCursors[toolType]} ${interactive ? '' : 'is-preview'}`}
     style={`background: ${background}; color: ${paletteColor}; width: 100%; height: 100%;`}
     bind:this={canvas}
-    on:mousedown={startInteraction}
-    on:mouseup={stopInteraction}
-    on:mousemove={handleInteraction}
+    on:mousedown={(e) => interactive && startInteraction(e)}
+    on:mouseup={(e) => interactive && stopInteraction(e)}
+    on:mousemove={(e) => interactive && handleInteraction(e)}
     on:contextmenu={(e) => e.preventDefault()}
-    on:touchstart={startInteraction}
-    on:touchend={stopInteraction}
-    on:touchmove={handleInteraction}
-    on:touchcancel={stopInteraction}
-    on:wheel={handleZoom}
+    on:touchstart={(e) => interactive && startInteraction(e)}
+    on:touchend={(e) => interactive && stopInteraction(e)}
+    on:touchmove={(e) => interactive && handleInteraction(e)}
+    on:touchcancel={(e) => interactive && stopInteraction(e)}
+    on:wheel={(e) => interactive && handleZoom(e)}
 ></canvas>
 
 <style>
+    canvas {
+        display: block;
+        touch-action: none;
+    }
+
+    .is-preview {
+        pointer-events: none;
+    }
+
     .cursor-eraser {
         cursor: url('/eraser.svg'), pointer;
     }
