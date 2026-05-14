@@ -320,6 +320,13 @@
                         >
                             X
                         </button>
+                        <button
+                            class:active={toolType === TOOLS.TEXT}
+                            on:click={() => changeTool(TOOLS.TEXT)}
+                            aria-label="Text"
+                        >
+                            T
+                        </button>
                         <button on:click={() => editorCanvas?.undo()} aria-label="Undo">
                             Undo
                         </button>

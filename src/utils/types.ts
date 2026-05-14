@@ -31,4 +31,6 @@ export type Element = {
     position: Point;
     selected: boolean;
     crossedOut: boolean;
+    text?: string;
+    fontSize?: number;
 };

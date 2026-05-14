@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onDestroy, onMount } from 'svelte';
+    import { onDestroy, onMount, tick } from 'svelte';
 
     import { toolCursors, TOOLS } from '../utils/constants';
     import type { Element, Point } from '../utils/types';
@@ -28,6 +28,15 @@
     let scale = 1;
     let dragStart: Point | null = null;
     let lastLoadedState: string | undefined;
+    let textInput: HTMLTextAreaElement;
+    let textDraft:
+        | {
+              x: number;
+              y: number;
+              value: string;
+              fontSize: number;
+          }
+        | null = null;
 
     function getMousePosition(event: MouseEvent | TouchEvent): {
         x: number;
@@ -57,6 +66,16 @@
         element: Element,
     ): boolean => {
         let tolerance = 5;
+
+        if (element.type === TOOLS.TEXT) {
+            const bounds = getTextBounds(element);
+            return (
+                x >= bounds.x - tolerance &&
+                x <= bounds.x + bounds.width + tolerance &&
+                y >= bounds.y - bounds.height - tolerance &&
+                y <= bounds.y + tolerance
+            );
+        }
 
         for (let i = 1; i < element.points.length; i++) {
             const p1 = {
@@ -133,7 +152,72 @@
         points[prevIndex] = { x: midPointX, y: midPointY };
     }
 
+    function getTextBounds(element: Element) {
+        const fontSize = element.fontSize ?? 18;
+        const lines = (element.text ?? '').split('\n');
+        const width =
+            Math.max(...lines.map((line) => line.length), 1) * fontSize * 0.55;
+        const height = lines.length * fontSize * 1.2;
+        const point = element.points[0] ?? { x: 0, y: 0 };
+
+        return {
+            x: point.x + element.position.x,
+            y: point.y + element.position.y,
+            width,
+            height,
+        };
+    }
+
+    async function startTextDraft(x: number, y: number) {
+        textDraft = {
+            x,
+            y,
+            value: '',
+            fontSize: Math.max(14, strokeWidth * 5),
+        };
+
+        await tick();
+        requestAnimationFrame(() => textInput?.focus());
+    }
+
+    function commitTextDraft() {
+        if (!textDraft) return;
+
+        const text = textDraft.value.trim();
+        if (text) {
+            const textElement: Element = {
+                id: elements.length,
+                type: TOOLS.TEXT,
+                points: [{ x: textDraft.x, y: textDraft.y }],
+                strokeColor: paletteColor,
+                strokeWidth,
+                position: { x: 0, y: 0 },
+                selected: false,
+                crossedOut: false,
+                text,
+                fontSize: textDraft.fontSize,
+            };
+
+            elements = [...elements, textElement];
+            undoStack = [...undoStack, textElement];
+            redoStack = [];
+        }
+
+        textDraft = null;
+        redraw();
+    }
+
+    function focusTextInput(node: HTMLTextAreaElement) {
+        requestAnimationFrame(() => node.focus());
+
+        return {};
+    }
+
     const startInteraction = (e: MouseEvent | TouchEvent) => {
+        if (textDraft) {
+            commitTextDraft();
+        }
+
         const { x, y } = getMousePosition(e);
 
         if (toolType === TOOLS.HAND) {
@@ -170,6 +254,8 @@
             elements = [...elements, crossElement];
             undoStack = [...undoStack, crossElement];
             redraw();
+        } else if (toolType === TOOLS.TEXT) {
+            startTextDraft(x, y);
         } else if (toolType === TOOLS.ERASER) {
             drawing = true;
             eraseAtPoint(x, y);
@@ -293,20 +379,26 @@
                     return Math.sqrt(dx * dx + dy * dy) > eraserSize / 2;
                 });
                 return element.points.length > 1;
-            } else if (element.type === TOOLS.CROSS_OUT) {
-                // Check if the eraser intersects with the cross
-                const crossLeft = element.position.x;
-                const crossRight = element.position.x + size;
-                const crossTop = element.position.y;
-                const crossBottom = element.position.y + size;
+            } else if (
+                element.type === TOOLS.CROSS_OUT ||
+                element.type === TOOLS.TEXT
+            ) {
+                const bounds =
+                    element.type === TOOLS.TEXT
+                        ? getTextBounds(element)
+                        : {
+                              x: element.position.x,
+                              y: element.position.y,
+                              width: size,
+                              height: size,
+                          };
 
                 if (
-                    x >= crossLeft - eraserSize / 2 &&
-                    x <= crossRight + eraserSize / 2 &&
-                    y >= crossTop - eraserSize / 2 &&
-                    y <= crossBottom + eraserSize / 2
+                    x >= bounds.x - eraserSize / 2 &&
+                    x <= bounds.x + bounds.width + eraserSize / 2 &&
+                    y >= bounds.y - bounds.height - eraserSize / 2 &&
+                    y <= bounds.y + eraserSize / 2
                 ) {
-                    // If the eraser intersects with the cross, remove it entirely
                     return false;
                 }
             }
@@ -367,6 +459,38 @@
                 }
             } else if (element.type === TOOLS.CROSS_OUT) {
                 drawCross(element);
+            } else if (element.type === TOOLS.TEXT) {
+                const point = element.points[0] ?? { x: 0, y: 0 };
+                const fontSize = element.fontSize ?? 18;
+                const lines = (element.text ?? '').split('\n');
+
+                context.fillStyle = element.strokeColor;
+                context.font = `${fontSize}px "Patrick Hand", cursive`;
+                context.textBaseline = 'alphabetic';
+
+                lines.forEach((line, index) => {
+                    context.fillText(
+                        line,
+                        point.x + element.position.x,
+                        point.y +
+                            element.position.y +
+                            index * fontSize * 1.2,
+                    );
+                });
+
+                if (element.selected) {
+                    const bounds = getTextBounds(element);
+                    context.strokeStyle = 'blue';
+                    context.lineWidth = 2 / scale;
+                    context.setLineDash([5 / scale, 5 / scale]);
+                    context.strokeRect(
+                        bounds.x - 4 / scale,
+                        bounds.y - bounds.height - 4 / scale,
+                        bounds.width + 8 / scale,
+                        bounds.height + 8 / scale,
+                    );
+                    context.setLineDash([]);
+                }
             }
         });
 
@@ -413,22 +537,54 @@
     });
 </script>
 
-<canvas
-    class={`${toolCursors[toolType]} ${interactive ? '' : 'is-preview'}`}
-    style={`background: ${background}; color: ${paletteColor}; width: 100%; height: 100%;`}
-    bind:this={canvas}
-    on:mousedown={(e) => interactive && startInteraction(e)}
-    on:mouseup={(e) => interactive && stopInteraction(e)}
-    on:mousemove={(e) => interactive && handleInteraction(e)}
-    on:contextmenu={(e) => e.preventDefault()}
-    on:touchstart={(e) => interactive && startInteraction(e)}
-    on:touchend={(e) => interactive && stopInteraction(e)}
-    on:touchmove={(e) => interactive && handleInteraction(e)}
-    on:touchcancel={(e) => interactive && stopInteraction(e)}
-    on:wheel={(e) => interactive && handleZoom(e)}
-></canvas>
+<div class="canvas-stage">
+    <canvas
+        class={`${toolCursors[toolType]} ${interactive ? '' : 'is-preview'}`}
+        style={`background: ${background}; color: ${paletteColor}; width: 100%; height: 100%;`}
+        bind:this={canvas}
+        on:mousedown={(e) => interactive && startInteraction(e)}
+        on:mouseup={(e) => interactive && stopInteraction(e)}
+        on:mousemove={(e) => interactive && handleInteraction(e)}
+        on:contextmenu={(e) => e.preventDefault()}
+        on:touchstart={(e) => interactive && startInteraction(e)}
+        on:touchend={(e) => interactive && stopInteraction(e)}
+        on:touchmove={(e) => interactive && handleInteraction(e)}
+        on:touchcancel={(e) => interactive && stopInteraction(e)}
+        on:wheel={(e) => interactive && handleZoom(e)}
+    ></canvas>
+
+    {#if textDraft}
+        <textarea
+            use:focusTextInput
+            bind:this={textInput}
+            class="text-draft"
+            bind:value={textDraft.value}
+            style:left={`${(textDraft.x / size) * 100}%`}
+            style:top={`${(textDraft.y / size) * 100}%`}
+            style:font-size={`${textDraft.fontSize}px`}
+            style:color={paletteColor}
+            placeholder="Type here"
+            aria-label="Canvas text"
+            on:blur={commitTextDraft}
+            on:mousedown={(event) => event.stopPropagation()}
+            on:touchstart={(event) => event.stopPropagation()}
+            on:keydown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    commitTextDraft();
+                }
+            }}
+        ></textarea>
+    {/if}
+</div>
 
 <style>
+    .canvas-stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
     canvas {
         display: block;
         touch-action: none;
@@ -451,5 +607,32 @@
     }
     .cursor-cross-out {
         cursor: crosshair;
+    }
+    .cursor-text {
+        cursor: text;
+    }
+
+    .text-draft {
+        position: absolute;
+        z-index: 2;
+        min-width: 10rem;
+        min-height: 2.25rem;
+        padding: 0 0 0 0.25rem;
+        border: 0;
+        border-left: 2px solid currentColor;
+        background: transparent;
+        box-sizing: border-box;
+        font-family: 'Patrick Hand', cursive;
+        line-height: 1.2;
+        resize: none;
+        outline: none;
+        transform: translateY(-1em);
+        overflow: hidden;
+        caret-color: currentColor;
+        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
+
+    .text-draft::placeholder {
+        color: rgba(0, 0, 0, 0.48);
     }
 </style>
