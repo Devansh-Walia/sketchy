@@ -203,6 +203,7 @@
         property="og:url"
         content="https://calendar.devanshwalia.com/calender"
     />
+    <link rel="canonical" href="https://calendar.devanshwalia.com/calender" />
 </svelte:head>
 
 {#if isLoaded}

@@ -21,6 +21,7 @@
         content="A powerful yet simple digital drawing and annotation tool for creating beautiful calendars"
     />
     <meta property="og:url" content="https://calendar.devanshwalia.com/" />
+    <link rel="canonical" href="https://calendar.devanshwalia.com/" />
     <meta property="og:type" content="website" />
     <link
         href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600&display=swap"
